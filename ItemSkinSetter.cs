@@ -29,21 +29,40 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using Oxide.Core;
-using Oxide.Core.Libraries.Covalence;
+using Newtonsoft.Json;
 
 namespace Oxide.Plugins
 {
-    [Info("Item Skin Setter", "ThibmoRozier", "1.0.0")]
+    [Info("Item Skin Setter", "ThibmoRozier", "1.1.0")]
     [Description("Sets the default skin ID for newly crafted items.")]
     public class ItemSkinSetter : RustPlugin
     {
+        #region Types
+        private struct ShortnameToWorkshopId
+        {
+            [JsonProperty("Item Shortname")]
+            public string ItemShortname;
+            [JsonProperty("Skin Id")]
+            public ulong SkinId;
+        }
+
+        /// <summary>
+        /// The config type class
+        /// </summary>
+        private class ConfigData
+        {
+            [JsonProperty("Bindings")]
+            public List<ShortnameToWorkshopId> Bindings = new List<ShortnameToWorkshopId>();
+        }
+        #endregion Types
+
         #region Constants
         private const string CPermAdmin = "itemskinsetter.admin";
         private const string CDataFileName = "ItemSkinSetter_data";
         #endregion Constants
 
         #region Variables
+        private ConfigData FConfigData;
         private Dictionary<int, int> FItemSkinBindings;
         #endregion Variables
 
@@ -74,74 +93,6 @@ namespace Oxide.Plugins
 
             return true;
         }
-
-        private string SetSkinForItem(string aItemArg, ulong aSkinId)
-        {
-            ItemDefinition itemDef = null;
-            IPlayerItemDefinition skinDef;
-
-            if (!IsNumber(aItemArg)) {
-                itemDef = ItemManager.FindItemDefinition(aItemArg);
-            } else {
-                int itemId;
-
-                if (int.TryParse(aItemArg, out itemId))
-                    itemDef = ItemManager.FindItemDefinition(itemId);
-            }
-
-            if (itemDef == null)
-                return String.Format(_("Err Item Does Not Exist"), aItemArg);
-
-
-            try {
-                skinDef = itemDef.skins2.First(x => x.WorkshopId == aSkinId);
-            } catch (InvalidOperationException) {
-                return String.Format(_("Err Skin Does Not Exist"), aSkinId);
-            }
-
-            FItemSkinBindings[itemDef.itemid] = skinDef.DefinitionId;
-            Interface.Oxide.DataFileSystem.WriteObject(CDataFileName, FItemSkinBindings);
-            return String.Format(_("Msg Successful Skin Set"), itemDef.shortname, itemDef.itemid, aSkinId, skinDef.Name);
-        }
-
-        private string GetSkinForItem(string aItemArg)
-        {
-            ItemDefinition itemDef = null;
-
-            if (!IsNumber(aItemArg)) {
-                itemDef = ItemManager.FindItemDefinition(aItemArg);
-            } else {
-                int itemId;
-
-                if (int.TryParse(aItemArg, out itemId))
-                    itemDef = ItemManager.FindItemDefinition(itemId);
-            }
-
-            if (itemDef == null)
-                return String.Format(_("Err Item Does Not Exist"), aItemArg);
-
-            if (FItemSkinBindings.ContainsKey(itemDef.itemid)) {
-                int skinId = FItemSkinBindings[itemDef.itemid];
-                IPlayerItemDefinition skinDef = itemDef.skins2.First(x => x.DefinitionId == skinId);
-                return String.Format(_("Msg Item Skin"), itemDef.shortname, itemDef.itemid, skinDef.WorkshopId, skinDef.Name);
-            } else {
-                return String.Format(_("Msg Item Skin Default"), itemDef.shortname, itemDef.itemid);
-            }
-        }
-
-        private void ResetSkinForItem(string aItemArg)
-        {
-            if (!IsNumber(aItemArg)) {
-                ItemDefinition itemDef = ItemManager.FindItemDefinition(aItemArg);
-
-                if (itemDef != null)
-                    FItemSkinBindings.Remove(int.Parse(aItemArg));
-            } else {
-                FItemSkinBindings.Remove(int.Parse(aItemArg));
-            }
-
-            Interface.Oxide.DataFileSystem.WriteObject(CDataFileName, FItemSkinBindings);
-        }
         #endregion Script Methods
 
         #region Hooks
@@ -149,27 +100,84 @@ namespace Oxide.Plugins
             lang.RegisterMessages(
                 new Dictionary<string, string> {
                     { "Err Invalid Args", "Invalid argument (count), please try again." },
-                    { "Err Invalid Permission", "You do not have permission to use this command." },
                     { "Err Item Does Not Exist", "Item \"{0}\" does not exist." },
                     { "Err Skin Does Not Exist", "Skin with ID \"{0}\" does not exist." },
 
-                    { "Msg Successful Skin Set", "The skin of item \"{0}\" ({1}) is successfully set to \"{2}\" ( Name = \"{3}\" )." },
                     { "Msg Item Skin Default", "The skin of item \"{0}\" ({1}) is default." },
-                    { "Msg Item Skin", "The skin of item \"{0}\" ({1}) is \"{2}\" ( Name = \"{3}\" )." },
-                    { "Msg Successful Remove", "Successfully removed modified default skin ID for \"{0}\"." }
+                    { "Msg Item Skin", "The skin of item \"{0}\" ({1}) is \"{2}\" ( Name = \"{3}\" )." }
                 }, this, "en"
             );
         }
 
+        protected override void LoadConfig()
+        {
+            base.LoadConfig();
+            FConfigData = Config.ReadObject<ConfigData>();
+
+            if (FConfigData == null)
+                LoadDefaultConfig();
+        }
+
+        protected override void LoadDefaultConfig()
+        {
+            FConfigData = new ConfigData();
+            List<ItemDefinition> itemlist = ItemManager.GetItemDefinitions();
+            ItemDefinition curItem;
+
+            for (int i = 0; i < itemlist.Count; i++) {
+                curItem = itemlist[i];
+
+                if (curItem.HasSkins)
+                    FConfigData.Bindings.Add(new ShortnameToWorkshopId { ItemShortname = curItem.shortname, SkinId = 0 });
+            }
+
+            SaveConfig();
+        }
+
+        protected override void SaveConfig() => Config.WriteObject(FConfigData);
+
         void OnServerInitialized()
         {
-            permission.RegisterPermission(CPermAdmin, this);
+            ShortnameToWorkshopId confItem;
+            ItemDefinition itemDef;
+            IPlayerItemDefinition skinDef;
+            StringBuilder sb = new StringBuilder("Config parsing errors:\n");
+            int errCount = 0;
+            FItemSkinBindings = new Dictionary<int, int>();
 
-            if (Interface.Oxide.DataFileSystem.ExistsDatafile(CDataFileName)) {
-                FItemSkinBindings = Interface.Oxide.DataFileSystem.ReadObject<Dictionary<int, int>>(CDataFileName);
-            } else {
-                FItemSkinBindings = new Dictionary<int, int>();
+            for (int i = 0; i < FConfigData.Bindings.Count; i++) {
+                confItem = FConfigData.Bindings[i];
+
+                if (confItem.SkinId == 0)
+                    continue;
+
+                itemDef = ItemManager.FindItemDefinition(confItem.ItemShortname);
+
+                if (itemDef == null) {
+                    sb.Append("  - " + String.Format(_("Err Item Does Not Exist"), confItem.ItemShortname) + "\n");
+                    errCount++;
+                    continue;
+                }
+
+                try {
+                    skinDef = itemDef.skins2.First(x => x.WorkshopId == confItem.SkinId);
+                } catch (InvalidOperationException) {
+                    sb.Append("  - " + String.Format(_("Err Skin Does Not Exist"), confItem.SkinId) + "\n");
+                    errCount++;
+                    continue;
+                }
+
+                FItemSkinBindings[itemDef.itemid] = skinDef.DefinitionId;
             }
+
+            if (errCount > 0)
+                Puts(sb.Append($"\nTotal error count: {errCount}\n").ToString());
+        }
+
+        void Unload()
+        {
+            FItemSkinBindings.Clear();
+            FItemSkinBindings = null;
         }
 
         object OnItemCraft(ItemCraftTask aTask, BasePlayer aPlayer, Item aItem)
@@ -183,50 +191,6 @@ namespace Oxide.Plugins
         #endregion Hooks
 
         #region Commands
-        [ChatCommand("iss_set")]
-        private void ItemSkinSetterSetCmd(BasePlayer aPlayer, string aCommand, string[] aArgs) {
-            IPlayer player = aPlayer.IPlayer;
-
-            if (player.IsServer || aArgs.Length < 2 || !IsNumber(aArgs[1])) {
-                player.Reply(_("Err Invalid Args"));
-                return;
-            }
-
-            if (!permission.UserHasPermission(aPlayer.UserIDString, CPermAdmin)) {
-                player.Reply(_("Err Invalid Permission"));
-                return;
-            }
-
-            player.Reply(SetSkinForItem(aArgs[0], ulong.Parse(aArgs[1])));
-        }
-
-        [ConsoleCommand("iss_set")]
-        private void ItemSkinSetterSetCmd(ConsoleSystem.Arg aArg) {
-            if (aArg.Args.Length < 2 || !IsNumber(aArg.Args[1])) {
-                Puts(_("Err Invalid Args"));
-                return;
-            }
-
-            Puts(SetSkinForItem(aArg.Args[0], ulong.Parse(aArg.Args[1])));
-        }
-
-        [ChatCommand("iss_get")]
-        private void ItemSkinSetterGetCmd(BasePlayer aPlayer, string aCommand, string[] aArgs) {
-            IPlayer player = aPlayer.IPlayer;
-
-            if (player.IsServer || aArgs.Length < 1) {
-                player.Reply(_("Err Invalid Args"));
-                return;
-            }
-
-            if (!permission.UserHasPermission(aPlayer.UserIDString, CPermAdmin)) {
-                player.Reply(_("Err Invalid Permission"));
-                return;
-            }
-
-            player.Reply(GetSkinForItem(aArgs[0]));
-        }
-
         [ConsoleCommand("iss_get")]
         private void ItemSkinSetterGetCmd(ConsoleSystem.Arg aArg) {
             if (aArg.Args.Length < 1) {
@@ -234,36 +198,28 @@ namespace Oxide.Plugins
                 return;
             }
 
-            Puts(GetSkinForItem(aArg.Args[0]));
-        }
+            string itemArg = aArg.Args[0];
+            ItemDefinition itemDef = null;
 
-        [ChatCommand("iss_remove")]
-        private void ItemSkinSetterRemoveCmd(BasePlayer aPlayer, string aCommand, string[] aArgs) {
-            IPlayer player = aPlayer.IPlayer;
+            if (!IsNumber(itemArg)) {
+                itemDef = ItemManager.FindItemDefinition(itemArg);
+            } else {
+                int itemId;
 
-            if (player.IsServer || aArgs.Length < 1) {
-                player.Reply(_("Err Invalid Args"));
-                return;
+                if (int.TryParse(itemArg, out itemId))
+                    itemDef = ItemManager.FindItemDefinition(itemId);
             }
 
-            if (!permission.UserHasPermission(aPlayer.UserIDString, CPermAdmin)) {
-                player.Reply(_("Err Invalid Permission"));
-                return;
+            if (itemDef == null)
+                Puts(_("Err Item Does Not Exist"), itemArg);
+
+            if (FItemSkinBindings.ContainsKey(itemDef.itemid)) {
+                int skinId = FItemSkinBindings[itemDef.itemid];
+                IPlayerItemDefinition skinDef = itemDef.skins2.First(x => x.DefinitionId == skinId);
+                Puts(_("Msg Item Skin"), itemDef.shortname, itemDef.itemid, skinDef.WorkshopId, skinDef.Name);
+            } else {
+                Puts(_("Msg Item Skin Default"), itemDef.shortname, itemDef.itemid);
             }
-
-            ResetSkinForItem(aArgs[0]);
-            player.Reply(_("Msg Successful Remove"), null, aArgs[0]);
-        }
-
-        [ConsoleCommand("iss_remove")]
-        private void ItemSkinSetterRemoveCmd(ConsoleSystem.Arg aArg) {
-            if (aArg.Args.Length < 1) {
-                Puts(_("Err Invalid Args"));
-                return;
-            }
-
-            ResetSkinForItem(aArg.Args[0]);
-            Puts(_("Msg Successful Remove"), aArg.Args[0]);
         }
 
         [ConsoleCommand("iss_getskins")]
