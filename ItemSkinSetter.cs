@@ -33,7 +33,7 @@ using Newtonsoft.Json;
 
 namespace Oxide.Plugins
 {
-    [Info("Item Skin Setter", "ThibmoRozier", "1.1.0")]
+    [Info("Item Skin Setter", "ThibmoRozier", "1.1.1")]
     [Description("Sets the default skin ID for newly crafted items.")]
     public class ItemSkinSetter : RustPlugin
     {
@@ -56,18 +56,13 @@ namespace Oxide.Plugins
         }
         #endregion Types
 
-        #region Constants
-        private const string CPermAdmin = "itemskinsetter.admin";
-        private const string CDataFileName = "ItemSkinSetter_data";
-        #endregion Constants
-
         #region Variables
         private ConfigData FConfigData;
         private Dictionary<int, int> FItemSkinBindings;
         #endregion Variables
 
         #region Script Methods
-        private string _(string aKey) => lang.GetMessage(aKey, this);
+        private string _(string aKey, string aPlayerId = null) => lang.GetMessage(aKey, this, aPlayerId);
 
         /// <summary>
         /// Determine whether or not a given string is a number
@@ -100,6 +95,7 @@ namespace Oxide.Plugins
             lang.RegisterMessages(
                 new Dictionary<string, string> {
                     { "Err Invalid Args", "Invalid argument (count), please try again." },
+                    { "Err Invalid Permission", "You do not have permission to use this command." },
                     { "Err Item Does Not Exist", "Item \"{0}\" does not exist." },
                     { "Err Skin Does Not Exist", "Skin with ID \"{0}\" does not exist." },
 
@@ -174,12 +170,6 @@ namespace Oxide.Plugins
                 Puts(sb.Append($"\nTotal error count: {errCount}\n").ToString());
         }
 
-        void Unload()
-        {
-            FItemSkinBindings.Clear();
-            FItemSkinBindings = null;
-        }
-
         object OnItemCraft(ItemCraftTask aTask, BasePlayer aPlayer, Item aItem)
         {
             // We only change when the skin ID is default
@@ -193,6 +183,11 @@ namespace Oxide.Plugins
         #region Commands
         [ConsoleCommand("iss_get")]
         private void ItemSkinSetterGetCmd(ConsoleSystem.Arg aArg) {
+            if (aArg.IsClientside) {
+                Puts(_("Err Invalid Permission", aArg.Connection.userid.ToString()));
+                return;
+            }
+
             if (aArg.Args.Length < 1) {
                 Puts(_("Err Invalid Args"));
                 return;
@@ -224,6 +219,11 @@ namespace Oxide.Plugins
 
         [ConsoleCommand("iss_getskins")]
         private void ItemSkinSetterGetSkinsCmd(ConsoleSystem.Arg aArg) {
+            if (aArg.IsClientside) {
+                Puts(_("Err Invalid Permission", aArg.Connection.userid.ToString()));
+                return;
+            }
+
             if (aArg.Args.Length < 1) {
                 Puts(_("Err Invalid Args"));
                 return;
