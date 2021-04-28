@@ -5,6 +5,8 @@ This plugin was written after a suggestion by [TFNBlackMarket](https://umod.org/
 
 ## Console Commands
 
+These commands only work from the server-side console and RCON. Usage from the client-side console is blocked.
+
 - **iss_get <Item ID or ShortName>** -- Retrieve the current custom default skin ID for an item.
 - **iss_getskins <Item ID or ShortName>** -- Retrieve the available skins for an item.
 
@@ -47,6 +49,7 @@ You can remove entries you don't use. If you prefer to keep them in the config, 
 ```json
 {
   "Err Invalid Args": "Invalid argument (count), please try again.",
+  "Err Invalid Permission": "You do not have permission to use this command.",
   "Err Item Does Not Exist": "Item \"{0}\" does not exist.",
   "Err Skin Does Not Exist": "Skin with ID \"{0}\" does not exist.",
   "Msg Item Skin Default": "The skin of item \"{0}\" ({1}) is default.",

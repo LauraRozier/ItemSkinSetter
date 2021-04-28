@@ -33,7 +33,7 @@ using Newtonsoft.Json;
 
 namespace Oxide.Plugins
 {
-    [Info("Item Skin Setter", "ThibmoRozier", "1.1.1")]
+    [Info("Item Skin Setter", "ThibmoRozier", "1.1.2")]
     [Description("Sets the default skin ID for newly crafted items.")]
     public class ItemSkinSetter : RustPlugin
     {
@@ -184,7 +184,7 @@ namespace Oxide.Plugins
         [ConsoleCommand("iss_get")]
         private void ItemSkinSetterGetCmd(ConsoleSystem.Arg aArg) {
             if (aArg.IsClientside) {
-                Puts(_("Err Invalid Permission", aArg.Connection.userid.ToString()));
+                aArg.ReplyWith(_("Err Invalid Permission", aArg.Connection.userid.ToString()));
                 return;
             }
 
@@ -220,7 +220,7 @@ namespace Oxide.Plugins
         [ConsoleCommand("iss_getskins")]
         private void ItemSkinSetterGetSkinsCmd(ConsoleSystem.Arg aArg) {
             if (aArg.IsClientside) {
-                Puts(_("Err Invalid Permission", aArg.Connection.userid.ToString()));
+                aArg.ReplyWith(_("Err Invalid Permission", aArg.Connection.userid.ToString()));
                 return;
             }
 
