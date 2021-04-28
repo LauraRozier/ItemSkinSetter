@@ -48,7 +48,7 @@ You can remove entries you don't use. If you prefer to keep them in the config, 
 {
   "Err Invalid Args": "Invalid argument (count), please try again.",
   "Err Item Does Not Exist": "Item \"{0}\" does not exist.",
-  "Err Skin Does Not Exist": "Skin with ID \"{0}\" does not exist."
+  "Err Skin Does Not Exist": "Skin with ID \"{0}\" does not exist.",
   "Msg Item Skin Default": "The skin of item \"{0}\" ({1}) is default.",
   "Msg Item Skin": "The skin of item \"{0}\" ({1}) is \"{2}\" ( Name = \"{3}\" )."
 }
