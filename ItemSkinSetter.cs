@@ -33,7 +33,7 @@ using Newtonsoft.Json;
 
 namespace Oxide.Plugins
 {
-    [Info("Item Skin Setter", "ThibmoRozier", "1.1.2")]
+    [Info("Item Skin Setter", "ThibmoRozier", "1.1.3")]
     [Description("Sets the default skin ID for newly crafted items.")]
     public class ItemSkinSetter : RustPlugin
     {
@@ -88,6 +88,56 @@ namespace Oxide.Plugins
 
             return true;
         }
+
+        private void PerformStartupConfigCheck()
+        {
+            // We need the SteamPlatform ItemDefinitions to be there, if it's not we get a null-ref exception
+            if ((!PlatformService.Instance.IsValid) || PlatformService.Instance.ItemDefinitions == null) {
+                // Retry in one second
+                timer.Once(1f, PerformStartupConfigCheck);
+                return;
+            }
+
+            ShortnameToWorkshopId confItem;
+            ItemDefinition itemDef;
+            IPlayerItemDefinition skinDef;
+            StringBuilder sb = new StringBuilder("Config parsing errors:\n");
+            int errCount = 0;
+
+            for (int i = 0; i < FConfigData.Bindings.Count; i++) {
+                confItem = FConfigData.Bindings[i];
+
+                if (confItem.SkinId == 0)
+                    continue;
+
+                itemDef = ItemManager.FindItemDefinition(confItem.ItemShortname);
+
+                if (itemDef == null) {
+                    sb.Append("  - " + String.Format(_("Err Item Does Not Exist"), confItem.ItemShortname) + "\n");
+                    errCount++;
+                    continue;
+                }
+
+                if (!itemDef.HasSkins) {
+                    sb.Append("  - " + String.Format(_("Err Skin Does Not Exist"), confItem.ItemShortname) + "\n");
+                    errCount++;
+                    continue;
+                }
+
+                try {
+                    skinDef = itemDef.skins2.First(x => x.WorkshopId == confItem.SkinId);
+                } catch (InvalidOperationException) {
+                    sb.Append("  - " + String.Format(_("Err Skin Does Not Exist"), confItem.SkinId) + "\n");
+                    errCount++;
+                    continue;
+                }
+
+                FItemSkinBindings[itemDef.itemid] = skinDef.DefinitionId;
+            }
+
+            if (errCount > 0)
+                Puts(sb.Append($"\nTotal error count: {errCount}\n").ToString());
+        }
         #endregion Script Methods
 
         #region Hooks
@@ -134,40 +184,8 @@ namespace Oxide.Plugins
 
         void OnServerInitialized()
         {
-            ShortnameToWorkshopId confItem;
-            ItemDefinition itemDef;
-            IPlayerItemDefinition skinDef;
-            StringBuilder sb = new StringBuilder("Config parsing errors:\n");
-            int errCount = 0;
             FItemSkinBindings = new Dictionary<int, int>();
-
-            for (int i = 0; i < FConfigData.Bindings.Count; i++) {
-                confItem = FConfigData.Bindings[i];
-
-                if (confItem.SkinId == 0)
-                    continue;
-
-                itemDef = ItemManager.FindItemDefinition(confItem.ItemShortname);
-
-                if (itemDef == null) {
-                    sb.Append("  - " + String.Format(_("Err Item Does Not Exist"), confItem.ItemShortname) + "\n");
-                    errCount++;
-                    continue;
-                }
-
-                try {
-                    skinDef = itemDef.skins2.First(x => x.WorkshopId == confItem.SkinId);
-                } catch (InvalidOperationException) {
-                    sb.Append("  - " + String.Format(_("Err Skin Does Not Exist"), confItem.SkinId) + "\n");
-                    errCount++;
-                    continue;
-                }
-
-                FItemSkinBindings[itemDef.itemid] = skinDef.DefinitionId;
-            }
-
-            if (errCount > 0)
-                Puts(sb.Append($"\nTotal error count: {errCount}\n").ToString());
+            PerformStartupConfigCheck();
         }
 
         object OnItemCraft(ItemCraftTask aTask, BasePlayer aPlayer, Item aItem)
