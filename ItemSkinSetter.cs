@@ -33,7 +33,7 @@ using Newtonsoft.Json;
 
 namespace Oxide.Plugins
 {
-    [Info("Item Skin Setter", "ThibmoRozier", "1.1.3")]
+    [Info("Item Skin Setter", "ThibmoRozier", "1.1.4")]
     [Description("Sets the default skin ID for newly crafted items.")]
     public class ItemSkinSetter : RustPlugin
     {
@@ -58,7 +58,7 @@ namespace Oxide.Plugins
 
         #region Variables
         private ConfigData FConfigData;
-        private Dictionary<int, int> FItemSkinBindings;
+        private Dictionary<int, ulong> FItemSkinBindings;
         #endregion Variables
 
         #region Script Methods
@@ -76,7 +76,8 @@ namespace Oxide.Plugins
 
             char cur;
 
-            for (int i = 0; i < aStr.Length; i++) {
+            for (int i = 0; i < aStr.Length; i++)
+            {
                 cur = aStr[i];
 
                 if (cur.Equals('-') || cur.Equals('+'))
@@ -92,7 +93,8 @@ namespace Oxide.Plugins
         private void PerformStartupConfigCheck()
         {
             // We need the SteamPlatform ItemDefinitions to be there, if it's not we get a null-ref exception
-            if ((!PlatformService.Instance.IsValid) || PlatformService.Instance.ItemDefinitions == null) {
+            if ((!PlatformService.Instance.IsValid) || PlatformService.Instance.ItemDefinitions == null)
+            {
                 // Retry in one second
                 timer.Once(1f, PerformStartupConfigCheck);
                 return;
@@ -100,11 +102,11 @@ namespace Oxide.Plugins
 
             ShortnameToWorkshopId confItem;
             ItemDefinition itemDef;
-            IPlayerItemDefinition skinDef;
             StringBuilder sb = new StringBuilder("Config parsing errors:\n");
             int errCount = 0;
 
-            for (int i = 0; i < FConfigData.Bindings.Count; i++) {
+            for (int i = 0; i < FConfigData.Bindings.Count; i++)
+            {
                 confItem = FConfigData.Bindings[i];
 
                 if (confItem.SkinId == 0)
@@ -112,27 +114,22 @@ namespace Oxide.Plugins
 
                 itemDef = ItemManager.FindItemDefinition(confItem.ItemShortname);
 
-                if (itemDef == null) {
+                if (itemDef == null)
+                {
                     sb.Append("  - " + String.Format(_("Err Item Does Not Exist"), confItem.ItemShortname) + "\n");
                     errCount++;
                     continue;
                 }
 
-                if (!itemDef.HasSkins) {
+                if (!itemDef.HasSkins)
+                {
                     sb.Append("  - " + String.Format(_("Err Skin Does Not Exist"), confItem.ItemShortname) + "\n");
                     errCount++;
                     continue;
                 }
 
-                try {
-                    skinDef = itemDef.skins2.First(x => x.WorkshopId == confItem.SkinId);
-                } catch (InvalidOperationException) {
-                    sb.Append("  - " + String.Format(_("Err Skin Does Not Exist"), confItem.SkinId) + "\n");
-                    errCount++;
-                    continue;
-                }
-
-                FItemSkinBindings[itemDef.itemid] = skinDef.DefinitionId;
+                FItemSkinBindings[itemDef.itemid] = confItem.SkinId;
+                Puts($"Item {itemDef.shortname} skin set to {FItemSkinBindings[itemDef.itemid]}");
             }
 
             if (errCount > 0)
@@ -141,7 +138,8 @@ namespace Oxide.Plugins
         #endregion Script Methods
 
         #region Hooks
-        protected override void LoadDefaultMessages() {
+        protected override void LoadDefaultMessages()
+        {
             lang.RegisterMessages(
                 new Dictionary<string, string> {
                     { "Err Invalid Args", "Invalid argument (count), please try again." },
@@ -170,7 +168,8 @@ namespace Oxide.Plugins
             List<ItemDefinition> itemlist = ItemManager.GetItemDefinitions();
             ItemDefinition curItem;
 
-            for (int i = 0; i < itemlist.Count; i++) {
+            for (int i = 0; i < itemlist.Count; i++)
+            {
                 curItem = itemlist[i];
 
                 if (curItem.HasSkins)
@@ -184,29 +183,33 @@ namespace Oxide.Plugins
 
         void OnServerInitialized()
         {
-            FItemSkinBindings = new Dictionary<int, int>();
+            FItemSkinBindings = new Dictionary<int, ulong>();
             PerformStartupConfigCheck();
         }
 
-        object OnItemCraft(ItemCraftTask aTask, BasePlayer aPlayer, Item aItem)
+        void OnItemCraftFinished(ItemCraftTask aTask, Item aItem)
         {
-            // We only change when the skin ID is default
             if (aTask.skinID == 0 && FItemSkinBindings.ContainsKey(aTask.blueprint.targetItem.itemid))
-                aTask.skinID = FItemSkinBindings[aTask.blueprint.targetItem.itemid];
-
-            return null;
+            {
+                aItem.skin = FItemSkinBindings[aTask.blueprint.targetItem.itemid];
+                aItem.MarkDirty();
+                Puts($"Item {aTask.blueprint.targetItem.shortname} skin set to {aItem.skin}");
+            }
         }
         #endregion Hooks
 
         #region Commands
         [ConsoleCommand("iss_get")]
-        private void ItemSkinSetterGetCmd(ConsoleSystem.Arg aArg) {
-            if (aArg.IsClientside) {
+        private void ItemSkinSetterGetCmd(ConsoleSystem.Arg aArg)
+        {
+            if (aArg.IsClientside)
+            {
                 aArg.ReplyWith(_("Err Invalid Permission", aArg.Connection.userid.ToString()));
                 return;
             }
 
-            if (aArg.Args.Length < 1) {
+            if (aArg.Args.Length < 1)
+            {
                 Puts(_("Err Invalid Args"));
                 return;
             }
@@ -214,9 +217,12 @@ namespace Oxide.Plugins
             string itemArg = aArg.Args[0];
             ItemDefinition itemDef = null;
 
-            if (!IsNumber(itemArg)) {
+            if (!IsNumber(itemArg))
+            {
                 itemDef = ItemManager.FindItemDefinition(itemArg);
-            } else {
+            }
+            else
+            {
                 int itemId;
 
                 if (int.TryParse(itemArg, out itemId))
@@ -226,33 +232,42 @@ namespace Oxide.Plugins
             if (itemDef == null)
                 Puts(_("Err Item Does Not Exist"), itemArg);
 
-            if (FItemSkinBindings.ContainsKey(itemDef.itemid)) {
-                int skinId = FItemSkinBindings[itemDef.itemid];
-                IPlayerItemDefinition skinDef = itemDef.skins2.First(x => x.DefinitionId == skinId);
+            if (FItemSkinBindings.ContainsKey(itemDef.itemid))
+            {
+                ulong skinId = FItemSkinBindings[itemDef.itemid];
+                IPlayerItemDefinition skinDef = itemDef.skins2.First(x => x.WorkshopId == skinId);
                 Puts(_("Msg Item Skin"), itemDef.shortname, itemDef.itemid, skinDef.WorkshopId, skinDef.Name);
-            } else {
+            }
+            else
+            {
                 Puts(_("Msg Item Skin Default"), itemDef.shortname, itemDef.itemid);
             }
         }
 
         [ConsoleCommand("iss_getskins")]
-        private void ItemSkinSetterGetSkinsCmd(ConsoleSystem.Arg aArg) {
-            if (aArg.IsClientside) {
+        private void ItemSkinSetterGetSkinsCmd(ConsoleSystem.Arg aArg)
+        {
+            if (aArg.IsClientside)
+            {
                 aArg.ReplyWith(_("Err Invalid Permission", aArg.Connection.userid.ToString()));
                 return;
             }
 
-            if (aArg.Args.Length < 1) {
+            if (aArg.Args.Length < 1)
+            {
                 Puts(_("Err Invalid Args"));
                 return;
             }
 
-    	    string itemArg = aArg.Args[0];
+            string itemArg = aArg.Args[0];
             ItemDefinition itemDef = null;
 
-            if (!IsNumber(itemArg)) {
+            if (!IsNumber(itemArg))
+            {
                 itemDef = ItemManager.FindItemDefinition(itemArg);
-            } else {
+            }
+            else
+            {
                 int itemId;
 
                 if (int.TryParse(itemArg, out itemId))
