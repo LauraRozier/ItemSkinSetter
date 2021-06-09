@@ -33,7 +33,7 @@ using Newtonsoft.Json;
 
 namespace Oxide.Plugins
 {
-    [Info("Item Skin Setter", "ThibmoRozier", "1.1.4")]
+    [Info("Item Skin Setter", "ThibmoRozier", "1.1.5")]
     [Description("Sets the default skin ID for newly crafted items.")]
     public class ItemSkinSetter : RustPlugin
     {
@@ -193,7 +193,6 @@ namespace Oxide.Plugins
             {
                 aItem.skin = FItemSkinBindings[aTask.blueprint.targetItem.itemid];
                 aItem.MarkDirty();
-                Puts($"Item {aTask.blueprint.targetItem.shortname} skin set to {aItem.skin}");
             }
         }
         #endregion Hooks
